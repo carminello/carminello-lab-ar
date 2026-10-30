@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MindAR Target Compiler — Carminello Lab 2.0</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- MindAR Official Compiler Script -->
+  <script src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.1.5/dist/mindar-image.prod.js"></script>
+
+  <style>
+    :root {
+      --bg: #08080C;
+      --card-bg: rgba(18, 19, 32, 0.85);
+      --neon-pink: #FF007F;
+      --neon-cyan: #00F0FF;
+      --text: #FFFFFF;
+      --muted: #9E9EB8;
+      --border: rgba(255, 0, 127, 0.4);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .container {
+      width: 100%;
+      max-width: 580px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 32px 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 35px rgba(255, 0, 127, 0.25);
+      text-align: center;
+    }
+    h1 {
+      font-family: 'Space Grotesk', monospace;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      margin-bottom: 8px;
+      color: var(--text);
+      text-shadow: 0 0 12px rgba(255, 0, 127, 0.6);
+    }
+    p.desc {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .dropzone {
+      border: 2px dashed rgba(255, 0, 127, 0.5);
+      border-radius: 16px;
+      padding: 30px 20px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      background: rgba(255, 255, 255, 0.02);
+      margin-bottom: 20px;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--neon-cyan);
+      background: rgba(0, 240, 255, 0.05);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
+    }
+    .drop-icon {
+      width: 44px;
+      height: 44px;
+      color: var(--neon-pink);
+      margin-bottom: 12px;
+      filter: drop-shadow(0 0 8px var(--neon-pink));
+    }
+    .drop-title {
+      font-family: 'Space Grotesk', monospace;
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .drop-sub {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .preview-box {
+      margin-top: 15px;
+      display: none;
+    }
+    .preview-img {
+      max-width: 100%;
+      max-height: 180px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      object-fit: contain;
+    }
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    button {
+      flex: 1;
+      padding: 13px 18px;
+      border-radius: 12px;
+      font-family: 'Space Grotesk', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.25s ease;
+      outline: none;
+    }
+    .btn-compile {
+      background: linear-gradient(135deg, #FF007F, #D6006B);
+      color: #fff;
+      box-shadow: 0 6px 20px rgba(255, 0, 127, 0.4);
+    }
+    .btn-compile:hover:not(:disabled) {
+      box-shadow: 0 8px 30px rgba(255, 0, 127, 0.65);
+      transform: translateY(-2px);
+    }
+    .btn-compile:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .btn-default {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--neon-cyan);
+    }
+    .btn-default:hover {
+      background: rgba(0, 240, 255, 0.1);
+      border-color: var(--neon-cyan);
+    }
+    .progress-container {
+      margin-top: 20px;
+      display: none;
+      text-align: left;
+    }
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--neon-pink));
+      box-shadow: 0 0 10px var(--neon-pink);
+      transition: width 0.15s ease;
+    }
+    .progress-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'Space Grotesk', monospace;
+    }
+    .status-alert {
+      margin-top: 18px;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      display: none;
+    }
+    .status-alert.success {
+      background: rgba(0, 255, 136, 0.1);
+      border: 1px solid rgba(0, 255, 136, 0.4);
+      color: #00FF88;
+    }
+    .status-alert.error {
+      background: rgba(255, 51, 102, 0.1);
+      border: 1px solid rgba(255, 51, 102, 0.4);
+      color: #FF3366;
+    }
+    .back-link {
+      margin-top: 22px;
+      display: inline-block;
+      color: var(--muted);
+      font-size: 12px;
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+    .back-link:hover {
+      color: var(--neon-cyan);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>MINDAR COMPILER TOOL</h1>
+    <p class="desc">
+      Trascina l'immagine del biglietto da visita per compilare il file <code>targets.mind</code> direttamente nel tuo browser, senza dipendenze o installazioni.
+    </p>
+
+    <div id="dropzone" class="dropzone">
+      <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+      <div class="drop-title">Trascina qui l'immagine del biglietto</div>
+      <div class="drop-sub">o clicca per selezionare (JPG / PNG ad alto contrasto)</div>
+      <input type="file" id="file-input" accept="image/png, image/jpeg" style="display: none;">
+      
+      <div id="preview-box" class="preview-box">
+        <img id="preview-img" class="preview-img" alt="Card Preview">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="btn-use-default" class="btn-default">Usa card-target.jpg esistente</button>
+      <button id="btn-compile" class="btn-compile" disabled>Avvia Compilazione</button>
+    </div>
+
+    <div id="progress-container" class="progress-container">
+      <div class="progress-labels">
+        <span id="progress-status">Estrazione feature descriptor...</span>
+        <span id="progress-perc">0%</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      </div>
+    </div>
+
+    <div id="status-alert" class="status-alert"></div>
+
+    <a href="index.html" class="back-link">&larr; Torna all'esperienza WebAR</a>
+  </div>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file-input');
+    const previewBox = document.getElementById('preview-box');
+    const previewImg = document.getElementById('preview-img');
+    const btnCompile = document.getElementById('btn-compile');
+    const btnUseDefault = document.getElementById('btn-use-default');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBarFill = document.getElementById('progress-bar-fill');
+    const progressPerc = document.getElementById('progress-perc');
+    const progressStatus = document.getElementById('progress-status');
+    const statusAlert = document.getElementById('status-alert');
+
+    let currentImageElement = null;
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files && fileInput.files[0]) {
+        handleFile(fileInput.files[0]);
+      }
+    });
+
+    btnUseDefault.addEventListener('click', () => {
+      loadImageSrc('card-target.jpg');
+    });
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => loadImageSrc(e.target.result);
+      reader.readAsDataURL(file);
+    }
+
+    function loadImageSrc(src) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        currentImageElement = img;
+        previewImg.src = src;
+        previewBox.style.display = 'block';
+        btnCompile.disabled = false;
+        showAlert('', '');
+      };
+      img.onerror = () => {
+        showAlert('Errore nel caricamento dell\'immagine selezionata.', 'error');
+      };
+      img.src = src;
+    }
+
+    btnCompile.addEventListener('click', async () => {
+      if (!currentImageElement) return;
+
+      btnCompile.disabled = true;
+      btnUseDefault.disabled = true;
+      progressContainer.style.display = 'block';
+      progressBarFill.style.width = '0%';
+      progressPerc.textContent = '0%';
+      progressStatus.textContent = 'Analisi feature points...';
+      showAlert('', '');
+
+      try {
+        if (!window.MINDAR || !window.MINDAR.IMAGE || !window.MINDAR.IMAGE.Compiler) {
+          throw new Error('Libreria MindAR Compiler non disponibile.');
+        }
+
+        const compiler = new window.MINDAR.IMAGE.Compiler();
+        await compiler.compileImageTargets([currentImageElement], (progress) => {
+          const perc = Math.round(progress);
+          progressBarFill.style.width = perc + '%';
+          progressPerc.textContent = perc + '%';
+          if (perc < 50) {
+            progressStatus.textContent = 'Estrazione feature points (' + perc + '%)...';
+          } else if (perc < 100) {
+            progressStatus.textContent = 'Ottimizzazione descrittori multiscala (' + perc + '%)...';
+          } else {
+            progressStatus.textContent = 'Generazione targets.mind...';
+          }
+        });
+
+        const exportedBuffer = await compiler.exportData();
+        const blob = new Blob([exportedBuffer], { type: 'application/octet-stream' });
+        const downloadUrl = URL.createObjectURL(blob);
+        
+        // Auto download
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = 'targets.mind';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        showAlert('Compilazione riuscita! Il file targets.mind è stato scaricato. Sostituiscilo nella cartella del progetto.', 'success');
+      } catch (err) {
+        console.error(err);
+        showAlert('Errore durante la compilazione: ' + err.message, 'error');
+      } finally {
+        btnCompile.disabled = false;
+        btnUseDefault.disabled = false;
+      }
+    });
+
+    function showAlert(msg, type) {
+      if (!msg) {
+        statusAlert.style.display = 'none';
+        return;
+      }
+      statusAlert.textContent = msg;
+      statusAlert.className = 'status-alert ' + type;
+      statusAlert.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

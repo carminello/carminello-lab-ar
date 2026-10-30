@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Duck Hunt — Powered by CarminelloLab</title>
+
+  <meta name="theme-color" content="#08080C">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Three.js (r128) via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- TensorFlow.js & COCO-SSD Object Detection for Real-World AI Interaction -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
+  <!-- Google Fonts: Space Grotesk & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Space+Grotesk:wght@500;700;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css?v=3.6">
+</head>
+<body>
+
+  <!-- Camera Pass-Through Video (Real World Background) -->
+  <video id="camera-feed" class="camera-feed" autoplay playsinline muted></video>
+
+  <!-- Fullscreen WebGL Canvas Container -->
+  <div id="ar-container"></div>
+
+  <!-- Screen Muzzle Flash Overlay -->
+  <div id="muzzle-flash" class="muzzle-flash"></div>
+  <div class="hud-vignette"></div>
+
+  <!-- Screen Damage Flash Overlay (Red Flash on Hit) -->
+  <div id="damage-flash" class="damage-flash"></div>
+  <div id="hit-vignette" class="hit-vignette"></div>
+
+  <!-- Wave Announcement Banner -->
+  <div id="wave-banner" class="wave-banner hidden">
+    <div class="wave-banner-content">
+      <div id="wave-banner-title" class="wave-banner-title">LIVELLO 1</div>
+      <div id="wave-banner-sub" class="wave-banner-sub">ONDATA IN ARRIVO</div>
+    </div>
+  </div>
+
+  <!-- HUD Top Dashboard -->
+  <header class="hud-topbar">
+    <div class="hud-brand">
+      <div class="brand-pill">
+        <span class="brand-dot"></span>
+        <span class="brand-name">DUCK HUNT</span>
+      </div>
+      <div class="nfc-tag-badge">
+        <span class="nfc-icon">⚡</span>
+        <span>NFC ACTIVE</span>
+      </div>
+    </div>
+
+    <!-- Live Game Stats Bar (Survival Mode: Level & HP) -->
+    <div id="game-stats-bar" class="game-stats-bar hidden">
+      <div class="stat-box stat-level">
+        <span class="stat-label">LIVELLO</span>
+        <span id="stat-level-val" class="stat-value">1</span>
+      </div>
+
+      <div class="stat-box stat-hp">
+        <div class="hp-header">
+          <span class="stat-label">HP</span>
+          <span id="stat-hp-text" class="stat-hp-text">100 / 100</span>
+        </div>
+        <div class="hp-bar-track">
+          <div id="hp-bar-fill" class="hp-bar-fill" style="width: 100%;"></div>
+        </div>
+      </div>
+
+      <div class="stat-box stat-score">
+        <span class="stat-label">PUNTI</span>
+        <span id="stat-score-val" class="stat-value">0000</span>
+      </div>
+
+      <div class="stat-box stat-ducks">
+        <span class="stat-label">PAPERELLE</span>
+        <span id="stat-ducks-val" class="stat-value">0</span>
+      </div>
+
+      <div class="stat-box stat-combo">
+        <span class="stat-label">COMBO</span>
+        <span id="stat-combo-val" class="stat-value">x1</span>
+      </div>
+    </div>
+
+    <div class="hud-top-actions">
+      <!-- Audio Toggle -->
+      <button id="btn-audio" class="icon-btn" title="Audio FX" aria-label="Audio Effetti">
+        <svg id="icon-sound-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        </svg>
+        <svg id="icon-sound-off" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <line x1="23" y1="9" x2="17" y2="15"></line>
+          <line x1="17" y1="9" x2="23" y2="15"></line>
+        </svg>
+      </button>
+
+      <!-- 360 Recenter Button -->
+      <button id="btn-recenter" class="icon-btn" title="Ricentra Visuale" aria-label="Ricentra">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="2" x2="12" y2="6"></line>
+          <line x1="12" y1="18" x2="12" y2="22"></line>
+          <line x1="2" y1="12" x2="6" y2="12"></line>
+          <line x1="18" y1="12" x2="22" y2="12"></line>
+        </svg>
+      </button>
+
+      <!-- Exit Minigame / Return to Menu Button (Active during game session) -->
+      <button id="btn-exit-game" class="icon-btn hidden" title="Esci al Menu" aria-label="Esci al Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Real-World AI Object Tracking Alert -->
+  <div id="hud-object-alert" class="hud-object-alert hidden">
+    <span class="ai-pulse-dot"></span>
+    <span id="hud-object-text">PAPEROTTO APPOLLAIATO SULL'OGGETTO!</span>
+  </div>
+
+  <!-- Classic Hunting Shotgun Crosshair -->
+  <div id="crosshair" class="crosshair hidden">
+    <div class="crosshair-outer-ring"></div>
+    <div class="crosshair-spread-ring"></div>
+    <div class="crosshair-bead"></div>
+    <div class="crosshair-wire wire-top"></div>
+    <div class="crosshair-wire wire-bottom"></div>
+    <div class="crosshair-wire wire-left"></div>
+    <div class="crosshair-wire wire-right"></div>
+    <div class="crosshair-tick tick-top"></div>
+    <div class="crosshair-tick tick-bottom"></div>
+    <div class="crosshair-tick tick-left"></div>
+    <div class="crosshair-tick tick-right"></div>
+    <!-- Dynamic FPS Hitmarker (White for normal, Gold/Red for Critical) -->
+    <div id="crosshair-hitmarker" class="crosshair-hitmarker">
+      <svg viewBox="0 0 24 24" class="hitmarker-svg">
+        <line x1="5" y1="5" x2="19" y2="19" />
+        <line x1="19" y1="5" x2="5" y2="19" />
+      </svg>
+    </div>
+    <div id="crosshair-lock-label" class="crosshair-lock-label">MIRINO DA CACCIA</div>
+  </div>
+
+  <!-- Floating Score Popups Container -->
+  <div id="floating-scores-container" class="floating-scores-container"></div>
+
+  <!-- Tactical 360 Sonar / Mini Radar -->
+  <div id="radar-container" class="radar-container hidden">
+    <div class="radar-grid">
+      <div class="radar-ring inner-ring"></div>
+      <div class="radar-ring outer-ring"></div>
+      <div class="radar-axis-v"></div>
+      <div class="radar-axis-h"></div>
+      <div class="radar-sweep"></div>
+      <div class="radar-player-marker"></div>
+    </div>
+    <!-- I blip delle paperelle vengono aggiunti dinamicamente via JS -->
+    <div id="radar-blips" class="radar-blips"></div>
+    <div class="radar-tag">SONAR 360°</div>
+  </div>
+
+  <!-- Bottom Weapon Controls -->
+  <footer id="hud-bottom" class="hud-bottom hidden">
+    <div class="blaster-dock">
+      <button id="btn-fire" class="btn-fire" aria-label="Spara">
+        <svg class="fire-crosshair-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="12" cy="12" r="8"></circle>
+          <line x1="12" y1="2" x2="12" y2="6"></line>
+          <line x1="12" y1="18" x2="12" y2="22"></line>
+          <line x1="2" y1="12" x2="6" y2="12"></line>
+          <line x1="18" y1="12" x2="22" y2="12"></line>
+        </svg>
+        <span class="fire-text">FUOCO!</span>
+      </button>
+      <div class="fire-hint">Ruota a 360° &bull; Inquadra e premi FUOCO o tocca lo schermo</div>
+      <div class="powered-by-brand-container in-dock">
+        <span class="powered-by-text">powered by:</span>
+        <img src="assets/carminello-icon-transparent.png" alt="CarminelloLab Logo" class="powered-by-logo">
+        <span class="powered-by-name">CarminelloLab</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Start Overlay (NFC Landing Screen) -->
+  <div id="start-overlay" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-badge-ring duck-badge">
+        <div class="modal-icon-pulse"></div>
+        <span class="duck-emoji">🦆</span>
+      </div>
+
+      <h1 class="modal-title">DUCK HUNT</h1>
+      <p class="modal-subtitle">Wave Survival 360° &bull; Sopravvivi alle ondate progressive!</p>
+
+      <!-- Pulsanti d'azione diretti nella scheda principale -->
+      <div class="start-card-actions">
+        <button id="btn-start-game" class="btn-primary" type="button">
+          <span>🎮 GIOCA ORA</span>
+          <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+
+        <button id="btn-start-leaderboard" class="btn-secondary btn-hall-of-fame-start" type="button">
+          🏆 Visualizza Classifica Arcade (Hall of Fame)
+        </button>
+      </div>
+
+      <div class="powered-by-brand-container">
+        <span class="powered-by-text">powered by:</span>
+        <img src="assets/carminello-icon-transparent.png" alt="CarminelloLab Logo" class="powered-by-logo">
+        <span class="powered-by-name">CarminelloLab</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Glassmorphism Bottom Dock (iOS Thumb Zone Menu) -->
+  <nav id="bottom-dock" class="bottom-dock" aria-label="Menu Principale">
+    <!-- Tasto Sinistro (HERO BUTTON): Mr.Duck Voice Assistant -->
+    <button id="btn-dock-mrduck" class="dock-btn dock-hero-btn" type="button" aria-label="Mr.Duck Assistente Vocale Promemoria">
+      <div class="dock-hero-glow"></div>
+      <div class="dock-hero-circle">
+        <span class="dock-hero-icon">🦆✨</span>
+      </div>
+      <span class="dock-hero-label">Mr.Duck</span>
+    </button>
+
+    <!-- Tasto Destro: Social / Info Contatti -->
+    <button id="btn-dock-contacts" class="dock-btn dock-btn-side dock-btn-contacts" type="button" aria-label="Social e Contatti Delivery">
+      <span class="dock-btn-icon">📱</span>
+      <span class="dock-btn-label">Social / Info</span>
+    </button>
+  </nav>
+
+  <!-- Contacts 3D Mode HUD -->
+  <div id="contacts-hud" class="contacts-hud hidden">
+    <div class="contacts-top-bar">
+      <div class="contacts-badge">📬 CARMINELLOLAB DELIVERY</div>
+      <h3 class="contacts-title">CONSEGNA PAPERELLE POSTINE</h3>
+      <p class="contacts-sub">Tocca i pulsanti usciti dalle scatole per aprire i profili!</p>
+    </div>
+
+    <!-- Pulsanti dinamici che spuntano ed emergono direttamente dalle scatole delle paperelle -->
+    <div id="box-button-instagram" class="box-emerging-btn btn-insta-emerged hidden">
+      <div class="box-btn-bubble">
+        <div class="box-btn-icon-ring">📸</div>
+        <div class="box-btn-info">
+          <span class="box-btn-title">SEGUI INSTAGRAM</span>
+          <span class="box-btn-sub">@carminellolab_2.0</span>
+        </div>
+      </div>
+      <div class="box-btn-stem"></div>
+    </div>
+
+    <div id="box-button-tiktok" class="box-emerging-btn btn-tiktok-emerged hidden">
+      <div class="box-btn-bubble">
+        <div class="box-btn-icon-ring">🎵</div>
+        <div class="box-btn-info">
+          <span class="box-btn-title">SEGUI TIKTOK</span>
+          <span class="box-btn-sub">@carminellolab</span>
+        </div>
+      </div>
+      <div class="box-btn-stem"></div>
+    </div>
+
+    <button id="btn-close-contacts" class="btn-close-contacts" type="button">
+      <span>← TORNA AL MENU</span>
+    </button>
+  </div>
+
+  <!-- Game Over / Defeat Modal -->
+  <div id="game-over-overlay" class="modal-overlay hidden">
+    <div class="modal-card victory-card">
+      <!-- Pulsante in alto nell'End Game per la Classifica Arcade -->
+      <button id="btn-view-leaderboard" class="btn-arcade-top" type="button" aria-label="Visualizza Classifica Arcade">
+        <span class="btn-top-trophy">🏆</span>
+        <span class="btn-top-text">CLASSIFICA ARCADE 90'S</span>
+        <span class="btn-top-tag">TOP 10</span>
+      </button>
+
+      <div id="game-over-badge" class="modal-badge-ring victory-ring">💀</div>
+      <h2 id="game-over-title" class="modal-title">SEI STATO SOPRAFFATTO!</h2>
+      <p id="game-over-subtitle" class="modal-subtitle">Le paperelle hanno travolto le tue difese!</p>
+
+      <div class="victory-stats-grid">
+        <div class="vstat-item">
+          <span class="vstat-title">MASSIMO LIVELLO</span>
+          <span id="final-level" class="vstat-num highlight">LIVELLO 1</span>
+        </div>
+        <div class="vstat-item">
+          <span class="vstat-title">PUNTEGGIO TOTALE</span>
+          <span id="final-score" class="vstat-num">0</span>
+        </div>
+        <div class="vstat-item">
+          <span class="vstat-title">PAPERELLE ABBATTUTE</span>
+          <span id="final-ducks" class="vstat-num">0</span>
+        </div>
+        <div class="vstat-item">
+          <span class="vstat-title">DANNI SUBITI</span>
+          <span id="final-damage" class="vstat-num">0 HP</span>
+        </div>
+      </div>
+
+      <!-- Sezione Inserimento Nome Stile Arcade Anni '90 -->
+      <div id="arcade-register-box" class="arcade-register-box">
+        <div class="arcade-box-header">
+          <span class="arcade-sparkle">★</span>
+          <span class="arcade-box-title">REGISTRA IL RECORD</span>
+          <span class="arcade-sparkle">★</span>
+        </div>
+        <p class="arcade-box-sub">INSERISCI LE TUE INIZIALI (MAX 5 LETTERE):</p>
+        <div class="arcade-input-wrap">
+          <input 
+            type="text" 
+            id="arcade-input-name" 
+            class="arcade-input-name" 
+            maxlength="5" 
+            placeholder="CARM" 
+            autocomplete="off" 
+            autocorrect="off" 
+            autocapitalize="characters" 
+            spellcheck="false" 
+          />
+          <button id="btn-save-score" class="btn-arcade-save" type="button">
+            <span class="save-icon">💾</span>
+            <span class="save-text">SALVA</span>
+          </button>
+        </div>
+        <div id="arcade-save-feedback" class="arcade-save-feedback hidden"></div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="modal-btn-row">
+        <!-- Play Again -->
+        <button id="btn-play-again" class="btn-primary">
+          <span>GIOCA DI NUOVO</span>
+        </button>
+
+        <!-- Torna al Menu Principale -->
+        <button id="btn-game-over-menu" class="btn-secondary btn-game-over-menu" type="button">
+          <span>← TORNA AL MENU</span>
+        </button>
+
+        <!-- Social CTAs -->
+        <div class="game-over-social-row">
+          <!-- Instagram Link -->
+          <a href="https://instagram.com/carminellolab_2.0" target="_blank" rel="noopener noreferrer" class="btn-cta cta-instagram">
+            <svg class="cta-mini-svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069M12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/>
+            </svg>
+            <span>SEGUI SU INSTAGRAM</span>
+          </a>
+
+          <!-- TikTok Link -->
+          <a href="https://www.tiktok.com/@carminellolab" target="_blank" rel="noopener noreferrer" class="btn-cta cta-tiktok">
+            <svg class="cta-mini-svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>
+            </svg>
+            <span>SEGUI SU TIKTOK</span>
+          </a>
+        </div>
+
+        <div class="powered-by-brand-container">
+          <span class="powered-by-text">powered by:</span>
+          <img src="assets/carminello-icon-transparent.png" alt="CarminelloLab Logo" class="powered-by-logo">
+          <span class="powered-by-name">CarminelloLab</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard Modal / Hall of Fame -->
+  <div id="leaderboard-overlay" class="modal-overlay hidden">
+    <div class="modal-card arcade-leaderboard-card">
+      <div class="arcade-bezel">
+        <div class="leaderboard-badge-wrap">
+          <div class="arcade-trophy-ring">🏆</div>
+          <span class="arcade-badge-tag">TOP 10</span>
+        </div>
+
+        <h2 class="arcade-lb-title">HALL OF FAME 90'S</h2>
+        <p class="arcade-lb-subtitle">CLASSIFICA DEI MIGLIORI CACCATORI</p>
+
+        <div class="arcade-table-wrap">
+          <table class="arcade-table">
+            <thead>
+              <tr>
+                <th class="th-rank">POS</th>
+                <th class="th-name">NOME</th>
+                <th class="th-level">WAVE</th>
+                <th class="th-score">PUNTI</th>
+                <th class="th-ducks">PAPERE</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-table-body">
+              <!-- Riempito dinamicamente in JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="arcade-lb-actions">
+          <button id="btn-close-leaderboard" class="btn-primary btn-close-leaderboard" type="button">
+            <span>TORNA INDIETRO</span>
+          </button>
+        </div>
+
+        <div class="powered-by-brand-container in-leaderboard">
+          <span class="powered-by-text">powered by:</span>
+          <img src="assets/carminello-icon-transparent.png" alt="CarminelloLab Logo" class="powered-by-logo">
+          <span class="powered-by-name">CarminelloLab</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mr.Duck Assistant Voice Modal Overlay -->
+  <div id="mrduck-modal" class="modal-overlay mrduck-overlay hidden">
+    <div class="modal-card mrduck-card">
+      <button id="btn-close-mrduck" class="btn-close-modal mrduck-close-btn" type="button" aria-label="Chiudi assistente">✕</button>
+
+      <div class="mrduck-avatar-wrap">
+        <span class="mrduck-avatar-emoji">🦆✨</span>
+      </div>
+      <h2 class="mrduck-title">Mr.Duck ti ascolta!</h2>
+      <p class="mrduck-subtitle">ASSISTENTE VOCALE ARCADE 360°</p>
+
+      <!-- Pulsing Mic Visualizer -->
+      <div class="mrduck-mic-container">
+        <div class="mic-wave-ring ring-1"></div>
+        <div class="mic-wave-ring ring-2"></div>
+        <button type="button" id="mrduck-mic-btn" class="mic-pulse-circle" aria-label="Pulsante Microfono Mr.Duck">
+          <span class="mic-icon">🎙️</span>
+        </button>
+      </div>
+
+      <!-- Dynamic Status Text -->
+      <div class="mrduck-status-wrap">
+        <span class="status-pulse-dot"></span>
+        <p id="mrduck-status" class="mrduck-status">In ascolto... Parla pure, quack!</p>
+      </div>
+
+      <!-- Real-Time Voice Transcription Box -->
+      <div class="mrduck-transcript-card">
+        <div class="transcript-header-bar">
+          <span class="transcript-label">TRASCRIZIONE IN TEMPO REALE</span>
+          <span class="transcript-badge">it-IT 🎙️</span>
+        </div>
+        <div id="mrduck-transcript" class="mrduck-transcript-body">
+          <span class="transcript-placeholder">In attesa della tua voce... parla pure al microfono!</span>
+        </div>
+      </div>
+
+      <!-- Mr.Duck Speech Response Bubble -->
+      <div id="mrduck-reply-box" class="mrduck-reply-box hidden">
+        <div class="reply-badge">🦆 MR.DUCK RISPONDE:</div>
+        <div id="mrduck-reply-text" class="reply-text">Quack!</div>
+      </div>
+
+      <!-- Parsed Reminder Card -->
+      <div id="mrduck-reminder-card" class="mrduck-reminder-card hidden">
+        <div class="reminder-header-row">
+          <span class="reminder-icon-badge">📅 PROMEMORIA RILEVATO</span>
+          <span id="mrduck-parsed-date" class="reminder-date-tag">⏰ Domani alle 09:00</span>
+        </div>
+        <div id="mrduck-parsed-title" class="reminder-title-text">📌 Promemoria Mr.Duck</div>
+      </div>
+
+      <!-- Primary Calendar Action Button -->
+      <button type="button" id="btn-mrduck-calendar" class="btn-mrduck-calendar hidden">
+        <span class="cal-btn-icon">📅</span>
+        <span id="mrduck-cal-btn-text" class="cal-btn-text">📅 Aggiungi al Calendario</span>
+      </button>
+
+      <!-- Direct Calendar Choices (Google / Apple) -->
+      <div id="mrduck-cal-choices" class="mrduck-cal-choices hidden">
+        <a id="btn-mrduck-gcal" class="btn-cal-choice btn-choice-gcal" href="#" target="_blank" rel="noopener noreferrer">
+          <span class="choice-icon">🟢</span>
+          <div class="choice-info">
+            <span class="choice-title">Google Calendar</span>
+            <span class="choice-sub">Android &bull; Web</span>
+          </div>
+        </a>
+        <a id="btn-mrduck-apple" class="btn-cal-choice btn-choice-apple" href="#" download="promemoria.ics">
+          <span class="choice-icon">🍎</span>
+          <div class="choice-info">
+            <span class="choice-title">Apple Calendar</span>
+            <span class="choice-sub">iPhone &bull; iOS (.ics)</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- Action Controls -->
+      <div class="mrduck-action-row">
+        <button type="button" id="btn-mrduck-done" class="btn-mrduck-action btn-done-now">
+          <span>Fatto ✅</span>
+        </button>
+        <button type="button" id="btn-mrduck-retry" class="btn-mrduck-action btn-retry-now">
+          <span>🔄 Riprova</span>
+        </button>
+      </div>
+
+      <!-- Quick Tips -->
+      <div class="mrduck-hints">
+        <span class="hint-label">SUGGERIMENTI PROMEMORIA VOCALI:</span>
+        <div class="hint-tags">
+          <button type="button" class="hint-tag" data-say="Ricordami di comprare il pane domani alle 15:30">"Domani alle 15:30 compra pane"</button>
+          <button type="button" class="hint-tag" data-say="Avvisami di spegnere il forno tra 20 minuti">"Tra 20 minuti forno"</button>
+          <button type="button" class="hint-tag" data-say="Promemoria riunione alle 18">"Alle 18 riunione"</button>
+        </div>
+      </div>
+
+      <div class="powered-by-brand-container in-mrduck">
+        <span class="powered-by-text">powered by:</span>
+        <img src="assets/carminello-icon-transparent.png" alt="CarminelloLab Logo" class="powered-by-logo">
+        <span class="powered-by-name">CarminelloLab</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="main.js?v=3.6"></script>
+</body>
+</html>
